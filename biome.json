@@ -13,6 +13,8 @@
       "!**/.wxt",
       "!**/.output",
       "!**/dist",
+      "!**/playwright-report",
+      "!**/test-results",
       "!**/*.md"
     ]
   },
