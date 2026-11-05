@@ -2,8 +2,10 @@ import type { Catalog, CatalogFont } from './types';
 
 const FONTSOURCE_API_URL = 'https://api.fontsource.org/v1/fonts?type=google';
 
-export async function fetchCatalog(): Promise<Catalog> {
-  const response = await fetch(FONTSOURCE_API_URL);
+export async function fetchCatalog(
+  fetchFn: typeof fetch = fetch,
+): Promise<Catalog> {
+  const response = await fetchFn(FONTSOURCE_API_URL);
   if (!response.ok) {
     throw new Error(`Failed to fetch catalog: ${response.statusText}`);
   }

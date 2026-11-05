@@ -25,6 +25,7 @@ export interface Tag {
 export type CopyFormat = 'google-link' | 'google-import' | 'fontsource';
 export type PackageManager = 'pnpm' | 'npm' | 'yarn' | 'bun';
 export type FontDisplay = 'swap' | 'optional' | 'block' | 'fallback' | 'auto';
+export type StorageMode = 'sync' | 'local';
 
 export interface Settings {
   copyFormat: CopyFormat;
@@ -32,9 +33,36 @@ export interface Settings {
   preferVariable: boolean;
   defaultWeights: number[];
   display: FontDisplay;
+  storageMode?: StorageMode;
+}
+
+export interface ExportData {
+  version: number;
+  exportedAt: number;
+  favorites: Favorite[];
+  tags: Tag[];
+  settings?: Partial<Settings>;
 }
 
 export interface Catalog {
   fetchedAt: number;
   fonts: CatalogFont[];
+}
+
+export interface StorageQuotaStats {
+  bytesUsed: number;
+  totalBytes: number;
+  itemCount: number;
+  maxItems: number;
+  percentUsed: number;
+  isNearLimit: boolean;
+  isOverLimit: boolean;
+}
+
+export interface FilterOptions {
+  query?: string;
+  category?: string;
+  variableOnly?: boolean;
+  subsets?: string[];
+  tagIds?: string[];
 }

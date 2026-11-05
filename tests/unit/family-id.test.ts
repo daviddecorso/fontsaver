@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { familyNameToFontId, slugifyFamily } from '../../src/core/family-id';
+import {
+  extractFamilyFromHref,
+  familyNameToFontId,
+  slugifyFamily,
+} from '../../src/core/family-id';
 
 describe('family-id', () => {
   it('slugifies family names', () => {
@@ -21,5 +25,22 @@ describe('family-id', () => {
     ];
     expect(familyNameToFontId('Roboto', catalog)).toBe('roboto');
     expect(familyNameToFontId('Roboto Serif', catalog)).toBe('roboto-serif');
+  });
+
+  it('extracts family name from specimen hrefs', () => {
+    expect(extractFamilyFromHref('/specimen/Roboto')).toBe('Roboto');
+    expect(extractFamilyFromHref('/specimen/Open+Sans')).toBe('Open Sans');
+    expect(
+      extractFamilyFromHref('/specimen/Playfair+Display?preview.text=Hello'),
+    ).toBe('Playfair Display');
+    expect(
+      extractFamilyFromHref(
+        'https://fonts.google.com/specimen/Noto+Sans+JP#styles',
+      ),
+    ).toBe('Noto Sans JP');
+    expect(extractFamilyFromHref('/specimen/Noto%20Serif')).toBe('Noto Serif');
+    expect(extractFamilyFromHref('/specimen/')).toBeNull();
+    expect(extractFamilyFromHref('/about')).toBeNull();
+    expect(extractFamilyFromHref('')).toBeNull();
   });
 });

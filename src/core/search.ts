@@ -1,11 +1,6 @@
-import type { CatalogFont, Favorite, Tag } from './types';
+import type { CatalogFont, Favorite, FilterOptions, Tag } from './types';
 
-export interface FilterOptions {
-  query?: string;
-  category?: string;
-  variableOnly?: boolean;
-  tagIds?: string[];
-}
+export type { FilterOptions };
 
 export function filterFavorites(
   favorites: Favorite[],
@@ -31,6 +26,13 @@ export function filterFavorites(
       return false;
     }
 
+    if (filters.subsets && filters.subsets.length > 0) {
+      const hasAllSubsets = filters.subsets.every((subset) =>
+        fontInfo?.subsets?.includes(subset),
+      );
+      if (!hasAllSubsets) return false;
+    }
+
     if (filters.tagIds && filters.tagIds.length > 0) {
       const hasAllTags = filters.tagIds.every((tagId) =>
         fav.tags.includes(tagId),
@@ -45,8 +47,16 @@ export function filterFavorites(
         return name ? name.includes(query) : false;
       });
       const categoryMatch = fontInfo?.category.toLowerCase().includes(query);
+      const subsetMatch = fontInfo?.subsets?.some((s) =>
+        s.toLowerCase().includes(query),
+      );
+      const variableMatch =
+        (query === 'variable' || query === 'var') &&
+        Boolean(fontInfo?.variable);
 
-      return familyMatch || tagMatch || categoryMatch;
+      return (
+        familyMatch || tagMatch || categoryMatch || subsetMatch || variableMatch
+      );
     }
 
     return true;

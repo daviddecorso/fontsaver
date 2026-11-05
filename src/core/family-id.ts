@@ -10,6 +10,17 @@ export function slugifyFamily(family: string): string {
     .replace(/^-|-$/g, '');
 }
 
+export function extractFamilyFromHref(href: string): string | null {
+  if (!href) return null;
+  const match = href.match(/\/specimen\/([^/?#]+)/);
+  if (!match?.[1]) return null;
+  try {
+    return decodeURIComponent(match[1].replace(/\+/g, ' ')).trim() || null;
+  } catch {
+    return match[1].replace(/\+/g, ' ').trim() || null;
+  }
+}
+
 export function familyNameToFontId(
   familyName: string,
   catalog?: CatalogFont[],
