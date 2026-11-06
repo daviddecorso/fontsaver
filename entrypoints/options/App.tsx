@@ -164,7 +164,7 @@ export default function App() {
       const blob = new Blob([jsonStr], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
       const dateStr = new Date().toISOString().split('T')[0];
-      const filename = `google-fonts-favorites-${dateStr}.json`;
+      const filename = `fontsaver-${dateStr}.json`;
 
       const anchor = document.createElement('a');
       anchor.href = url;
@@ -318,7 +318,7 @@ export default function App() {
                 Settings
               </h1>
               <p className="text-[11px] text-zinc-500 mt-0.5">
-                Google Fonts Favorites preferences & storage
+                Fontsaver preferences & storage
               </p>
             </div>
           </div>

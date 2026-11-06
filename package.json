@@ -1,5 +1,5 @@
 {
-  "name": "google-fonts-favorites",
+  "name": "fontsaver",
   "description": "Chrome and Firefox extension to favorite Google Fonts, manage font collections, and copy snippets",
   "private": true,
   "version": "0.1.0",

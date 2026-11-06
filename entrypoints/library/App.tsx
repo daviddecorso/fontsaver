@@ -491,7 +491,7 @@ export default function App({
       const blob = new Blob([jsonStr], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
       const dateStr = new Date().toISOString().split('T')[0];
-      const filename = `google-fonts-favorites-${dateStr}.json`;
+      const filename = `fontsaver-${dateStr}.json`;
       const anchor = document.createElement('a');
       anchor.href = url;
       anchor.download = filename;

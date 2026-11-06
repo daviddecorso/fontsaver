@@ -1,6 +1,6 @@
 # Privacy
 
-Google Fonts Favorites does not collect, transmit, or sell personal data, and has no analytics or accounts.
+Fontsaver does not collect, transmit, or sell personal data, and has no analytics or accounts.
 
 **Stored in your browser:** favorites, tags, notes, and settings, in `storage.sync` (synced by your browser vendor if sync is on) or `storage.local`, depending on the storage mode you pick in Settings.
 

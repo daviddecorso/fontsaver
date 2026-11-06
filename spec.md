@@ -1,4 +1,4 @@
-# Google Fonts Favorites Extension: Starting Spec
+# Fontsaver Extension: Starting Spec
 
 Nov 4, 2026 · @David
 
