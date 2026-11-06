@@ -1,6 +1,6 @@
 import type { CatalogFont } from '../../src/core/types';
 import { catalogItem } from '../../src/storage/items';
-import { mountHeartButton } from './heart';
+import { type MountedHeart, mountHeartButton } from './heart';
 import {
   extractFamilyFromHref,
   findCardElement,
@@ -17,14 +17,36 @@ export function setCachedCatalog(catalog?: CatalogFont[]): void {
   cachedCatalog = catalog;
 }
 
+const mountedHearts = new WeakMap<
+  HTMLElement,
+  { family: string; heart: MountedHeart }
+>();
+
+// Google recycles elements, so a heart is stale if its family changed or its host was detached.
+function claimElement(element: HTMLElement, family: string): boolean {
+  const existing = mountedHearts.get(element);
+  if (
+    existing &&
+    existing.family === family &&
+    existing.heart.host.isConnected
+  ) {
+    return false;
+  }
+  existing?.heart.unmount();
+  mountedHearts.delete(element);
+  element.setAttribute(SELECTORS.cardMarker, family);
+  return true;
+}
+
 export function scanAndDecorate(root: Document | HTMLElement = document): void {
   const links = root.querySelectorAll<HTMLAnchorElement>(
     SELECTORS.specimenLink,
   );
+  const handledCards = new Set<HTMLElement>();
 
   for (const link of links) {
     const card = findCardElement(link);
-    if (card.hasAttribute(SELECTORS.cardMarker)) continue;
+    if (handledCards.has(card)) continue;
 
     const href = link.getAttribute('href');
     if (!href) continue;
@@ -32,10 +54,11 @@ export function scanAndDecorate(root: Document | HTMLElement = document): void {
     const family = extractFamilyFromHref(href);
     if (!family) continue;
 
-    card.setAttribute(SELECTORS.cardMarker, family);
+    handledCards.add(card);
+    if (!claimElement(card, family)) continue;
 
     const target = findMountTarget(card, link);
-    mountHeartButton(
+    const heart = mountHeartButton(
       target.container,
       {
         family,
@@ -43,6 +66,7 @@ export function scanAndDecorate(root: Document | HTMLElement = document): void {
       },
       target.referenceNode,
     );
+    mountedHearts.set(card, { family, heart });
   }
 
   if (
@@ -50,14 +74,13 @@ export function scanAndDecorate(root: Document | HTMLElement = document): void {
     isSpecimenPage(window.location.pathname)
   ) {
     const title = root.querySelector<HTMLElement>(SELECTORS.specimenTitle);
-    if (title && !title.hasAttribute(SELECTORS.cardMarker)) {
+    if (title) {
       const family =
         extractFamilyFromHref(window.location.pathname) ||
         title.textContent?.trim();
 
-      if (family) {
-        title.setAttribute(SELECTORS.cardMarker, family);
-        mountHeartButton(
+      if (family && claimElement(title, family)) {
+        const heart = mountHeartButton(
           title,
           {
             family,
@@ -65,6 +88,7 @@ export function scanAndDecorate(root: Document | HTMLElement = document): void {
           },
           title.firstChild,
         );
+        mountedHearts.set(title, { family, heart });
       }
     }
   }
@@ -125,6 +149,10 @@ export default defineContentScript({
     } catch {
       // Catalog may not be cached yet; fallback to slugify
     }
+
+    catalogItem.watch((next) => {
+      cachedCatalog = next?.fonts;
+    });
 
     startObserver();
   },

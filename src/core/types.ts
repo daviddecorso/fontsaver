@@ -22,10 +22,22 @@ export interface Tag {
   color: string;
 }
 
-export type CopyFormat = 'google-link' | 'google-import' | 'fontsource';
+export type CopyFormat =
+  | 'google-link'
+  | 'google-import'
+  | 'fontsource'
+  | 'tailwind-v4'
+  | 'tailwind-v3'
+  | 'next-font';
 export type PackageManager = 'pnpm' | 'npm' | 'yarn' | 'bun';
 export type FontDisplay = 'swap' | 'optional' | 'block' | 'fallback' | 'auto';
 export type StorageMode = 'sync' | 'local';
+export type SortOrder =
+  | 'newest'
+  | 'oldest'
+  | 'alpha-asc'
+  | 'alpha-desc'
+  | 'category';
 
 export interface Settings {
   copyFormat: CopyFormat;
@@ -42,6 +54,10 @@ export interface ExportData {
   favorites: Favorite[];
   tags: Tag[];
   settings?: Partial<Settings>;
+}
+
+export interface ExtensionMessage {
+  type: 'open-library' | 'open-options';
 }
 
 export interface Catalog {

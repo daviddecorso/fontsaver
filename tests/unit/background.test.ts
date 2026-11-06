@@ -6,9 +6,13 @@ import {
   handleCatalogAlarm,
   handleContextMenuClick,
   handleInstall,
+  handleMessage,
   MENU_FAVORITE_SPECIMEN,
   MENU_OPEN_LIBRARY,
   MENU_OPEN_OPTIONS,
+  MENU_OPEN_SIDEPANEL,
+  MESSAGE_OPEN_LIBRARY,
+  MESSAGE_OPEN_OPTIONS,
   setupContextMenus,
 } from '../../entrypoints/background';
 import { catalogItem, getAllFavorites } from '../../src/storage/items';
@@ -154,6 +158,12 @@ describe('background catalog caching', () => {
       );
       expect(fakeBrowser.contextMenus.create).toHaveBeenCalledWith(
         expect.objectContaining({
+          id: MENU_OPEN_SIDEPANEL,
+          title: 'Open in Side Panel',
+        }),
+      );
+      expect(fakeBrowser.contextMenus.create).toHaveBeenCalledWith(
+        expect.objectContaining({
           id: MENU_OPEN_OPTIONS,
           title: 'Preferences & Settings',
         }),
@@ -176,6 +186,18 @@ describe('background catalog caching', () => {
       expect(handled).toBe(true);
       expect(tabsCreateSpy).toHaveBeenCalledWith({
         url: expect.stringContaining('/library.html'),
+      });
+    });
+
+    it('handles open-sidepanel menu click', async () => {
+      const tabsCreateSpy = vi.spyOn(fakeBrowser.tabs, 'create');
+      const handled = await handleContextMenuClick({
+        menuItemId: MENU_OPEN_SIDEPANEL,
+      });
+
+      expect(handled).toBe(true);
+      expect(tabsCreateSpy).toHaveBeenCalledWith({
+        url: expect.stringContaining('/sidepanel.html'),
       });
     });
 
@@ -229,6 +251,31 @@ describe('background catalog caching', () => {
           linkUrl: 'https://fonts.google.com/about',
         }),
       ).toBe(false);
+    });
+  });
+
+  describe('runtime messages', () => {
+    it('handles open-library message and opens library tab', async () => {
+      const tabsCreateSpy = vi.spyOn(fakeBrowser.tabs, 'create');
+      const handled = await handleMessage({ type: MESSAGE_OPEN_LIBRARY });
+
+      expect(handled).toBe(true);
+      expect(tabsCreateSpy).toHaveBeenCalledWith({
+        url: expect.stringContaining('/library.html'),
+      });
+    });
+
+    it('handles open-options message and opens options', async () => {
+      const handled = await handleMessage({ type: MESSAGE_OPEN_OPTIONS });
+
+      expect(handled).toBe(true);
+      expect(fakeBrowser.runtime.openOptionsPage).toHaveBeenCalled();
+    });
+
+    it('ignores unknown message types or malformed messages', async () => {
+      expect(await handleMessage({ type: 'unknown' })).toBe(false);
+      expect(await handleMessage(null)).toBe(false);
+      expect(await handleMessage('string')).toBe(false);
     });
   });
 });

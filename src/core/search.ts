@@ -1,6 +1,41 @@
-import type { CatalogFont, Favorite, FilterOptions, Tag } from './types';
+import type {
+  CatalogFont,
+  Favorite,
+  FilterOptions,
+  SortOrder,
+  Tag,
+} from './types';
 
-export type { FilterOptions };
+export type { FilterOptions, SortOrder };
+
+export function sortFavorites(
+  favorites: Favorite[],
+  catalog: CatalogFont[] | undefined,
+  sortBy: SortOrder = 'newest',
+): Favorite[] {
+  const catalogMap = new Map(catalog?.map((c) => [c.id, c]));
+  const sorted = [...favorites];
+
+  switch (sortBy) {
+    case 'newest':
+      return sorted.sort((a, b) => b.addedAt - a.addedAt);
+    case 'oldest':
+      return sorted.sort((a, b) => a.addedAt - b.addedAt);
+    case 'alpha-asc':
+      return sorted.sort((a, b) => a.family.localeCompare(b.family));
+    case 'alpha-desc':
+      return sorted.sort((a, b) => b.family.localeCompare(a.family));
+    case 'category':
+      return sorted.sort((a, b) => {
+        const catA = catalogMap.get(a.id)?.category ?? 'zz';
+        const catB = catalogMap.get(b.id)?.category ?? 'zz';
+        const diff = catA.localeCompare(catB);
+        return diff !== 0 ? diff : a.family.localeCompare(b.family);
+      });
+    default:
+      return sorted;
+  }
+}
 
 export function filterFavorites(
   favorites: Favorite[],
@@ -46,6 +81,9 @@ export function filterFavorites(
         const name = tagMap.get(tagId);
         return name ? name.includes(query) : false;
       });
+      const noteMatch = fav.note
+        ? fav.note.toLowerCase().includes(query)
+        : false;
       const categoryMatch = fontInfo?.category.toLowerCase().includes(query);
       const subsetMatch = fontInfo?.subsets?.some((s) =>
         s.toLowerCase().includes(query),
@@ -55,7 +93,12 @@ export function filterFavorites(
         Boolean(fontInfo?.variable);
 
       return (
-        familyMatch || tagMatch || categoryMatch || subsetMatch || variableMatch
+        familyMatch ||
+        tagMatch ||
+        noteMatch ||
+        categoryMatch ||
+        subsetMatch ||
+        variableMatch
       );
     }
 

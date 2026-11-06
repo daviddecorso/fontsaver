@@ -279,7 +279,7 @@ describe('DOM card decoration and content script against fixtures', () => {
 
     const copyButtons =
       shadow?.querySelectorAll<HTMLButtonElement>('.gff-action-btn');
-    expect(copyButtons?.length).toBe(3);
+    expect(copyButtons?.length).toBe(5);
 
     // Click Google <link> button
     copyButtons?.[0]?.click();
@@ -293,5 +293,28 @@ describe('DOM card decoration and content script against fixtures', () => {
     const toast = shadow?.querySelector('.gff-toast');
     expect(toast?.classList.contains('visible')).toBe(true);
     expect(toast?.textContent).toContain('Copied Google <link>!');
+  });
+
+  it('sends open-library message when clicking open library button in empty tags menu', async () => {
+    const sendMessageSpy = vi
+      .spyOn(fakeBrowser.runtime, 'sendMessage')
+      .mockResolvedValue(undefined);
+
+    scanAndDecorate();
+
+    const host = document.querySelector<HTMLElement>(
+      '[data-gff-heart="Roboto"]',
+    );
+    const shadow = host?.shadowRoot;
+
+    host?.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true }));
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    const openLibBtn =
+      shadow?.querySelector<HTMLButtonElement>('.gff-open-lib-btn');
+    expect(openLibBtn).not.toBeNull();
+    openLibBtn?.click();
+
+    expect(sendMessageSpy).toHaveBeenCalledWith({ type: 'open-library' });
   });
 });

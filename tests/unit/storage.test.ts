@@ -18,6 +18,7 @@ import {
   settingsItem,
   tagsItem,
   toggleFavoriteTag,
+  updateFavoriteNote,
   updateTag,
   watchFavorites,
   watchStorageQuota,
@@ -293,5 +294,23 @@ describe('storage', () => {
 
     const fav = (await getAllFavorites()).find((f) => f.id === 'playfair');
     expect(fav?.tags).toEqual([tag2.id]);
+  });
+
+  it('updates and clears favorite note', async () => {
+    await saveFavorite({
+      id: 'inter',
+      family: 'Inter',
+      addedAt: 100,
+      tags: [],
+    });
+
+    const updated = await updateFavoriteNote('inter', 'Brand body font');
+    expect(updated?.note).toBe('Brand body font');
+
+    const favs = await getAllFavorites();
+    expect(favs.find((f) => f.id === 'inter')?.note).toBe('Brand body font');
+
+    const cleared = await updateFavoriteNote('inter', '   ');
+    expect(cleared?.note).toBeUndefined();
   });
 });

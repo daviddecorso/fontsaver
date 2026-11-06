@@ -48,10 +48,19 @@ export function isFontVariable(
   catalog?: CatalogFont[],
 ): boolean {
   const font = catalog?.find((f) => f.id === fav.id);
-  if (font) {
-    return Boolean(font.variable && settings.preferVariable);
-  }
-  return Boolean(settings.preferVariable);
+  return Boolean(font?.variable && settings.preferVariable);
+}
+
+function escapeQuoted(value: string): string {
+  return value.replace(/[\\']/g, '\\$&').replace(/[\r\n]+/g, ' ');
+}
+
+function encodeFamilyParam(family: string): string {
+  return family
+    .trim()
+    .split(/\s+/)
+    .map((part) => encodeURIComponent(part))
+    .join('+');
 }
 
 export function buildFontFamilyRule(
@@ -64,7 +73,30 @@ export function buildFontFamilyRule(
     ? `${fav.family} Variable`
     : fav.family;
   const fallback = getCategoryFallback(font?.category);
-  return `font-family: '${familyName}', ${fallback};`;
+  return `font-family: '${escapeQuoted(familyName)}', ${fallback};`;
+}
+
+export function buildFamilyParam(
+  familyName: string,
+  catalogFont?: CatalogFont,
+): string {
+  const encoded = encodeFamilyParam(familyName);
+  if (
+    catalogFont?.variable &&
+    catalogFont.weights &&
+    catalogFont.weights.length > 1
+  ) {
+    const min = Math.min(...catalogFont.weights);
+    const max = Math.max(...catalogFont.weights);
+    if (min < max) {
+      return `family=${encoded}:wght@${min}..${max}`;
+    }
+  }
+  const weights =
+    catalogFont?.weights && catalogFont.weights.length > 0
+      ? catalogFont.weights.join(';')
+      : '400;700';
+  return `family=${encoded}:wght@${weights}`;
 }
 
 function buildFamilyQueryParam(
@@ -72,10 +104,18 @@ function buildFamilyQueryParam(
   settings: Settings,
   catalog?: CatalogFont[],
 ): string {
-  const encodedName = fav.family.replace(/\s+/g, '+');
+  const encodedName = encodeFamilyParam(fav.family);
   const isVar = isFontVariable(fav, settings, catalog);
 
   if (isVar) {
+    const font = catalog?.find((f) => f.id === fav.id);
+    if (font?.weights && font.weights.length > 1) {
+      const min = Math.min(...font.weights);
+      const max = Math.max(...font.weights);
+      if (min < max) {
+        return `family=${encodedName}:wght@${min}..${max}`;
+      }
+    }
     return `family=${encodedName}:wght@100..900`;
   }
 
@@ -144,6 +184,89 @@ export function buildFontsourceSnippet(context: SnippetContext): string {
   return `${installCommand}\n\n${importStatements.join('\n')}\n\n${cssRules.join('\n')}`;
 }
 
+export function toNextFontFunctionName(family: string): string {
+  return family.replace(/[^a-zA-Z0-9]/g, '_');
+}
+
+export function toCamelCase(str: string): string {
+  const cleaned = str
+    .replace(/[^a-zA-Z0-9]+(.)/g, (_, chr) => chr.toUpperCase())
+    .replace(/^([A-Z])/, (_, chr) => chr.toLowerCase())
+    .replace(/[^a-zA-Z0-9]/g, '');
+  return cleaned || 'font';
+}
+
+export function buildTailwindV4Snippet(context: SnippetContext): string {
+  if (context.favorites.length === 0) return '';
+
+  const declarations = context.favorites.map((fav) => {
+    const isVar = isFontVariable(fav, context.settings, context.catalog);
+    const font = context.catalog?.find((f) => f.id === fav.id);
+    const familyName = isVar ? `${fav.family} Variable` : fav.family;
+    const fallback = getCategoryFallback(font?.category);
+    return `  --font-${fav.id}: '${escapeQuoted(familyName)}', ${fallback};`;
+  });
+
+  return `@theme {\n${declarations.join('\n')}\n}`;
+}
+
+export function buildTailwindV3Snippet(context: SnippetContext): string {
+  if (context.favorites.length === 0) return '';
+
+  const entries = context.favorites.map((fav) => {
+    const isVar = isFontVariable(fav, context.settings, context.catalog);
+    const font = context.catalog?.find((f) => f.id === fav.id);
+    const familyName = isVar ? `${fav.family} Variable` : fav.family;
+    const fallback = getCategoryFallback(font?.category);
+    return `      '${escapeQuoted(fav.id)}': ['"${escapeQuoted(familyName)}"', '${fallback}'],`;
+  });
+
+  return [
+    '// tailwind.config.js',
+    'module.exports = {',
+    '  theme: {',
+    '    extend: {',
+    '      fontFamily: {',
+    entries.join('\n'),
+    '      },',
+    '    },',
+    '  },',
+    '};',
+  ].join('\n');
+}
+
+export function buildNextFontSnippet(context: SnippetContext): string {
+  if (context.favorites.length === 0) return '';
+
+  const fnNames = context.favorites.map((fav) =>
+    toNextFontFunctionName(fav.family),
+  );
+  const uniqueFnNames = Array.from(new Set(fnNames));
+  const importLine = `import { ${uniqueFnNames.join(', ')} } from 'next/font/google';`;
+  const display = context.settings.display || 'swap';
+
+  const instances = context.favorites.map((fav) => {
+    const fnName = toNextFontFunctionName(fav.family);
+    const varName = toCamelCase(fav.family);
+    const font = context.catalog?.find((f) => f.id === fav.id);
+    const isVar = isFontVariable(fav, context.settings, context.catalog);
+
+    const subset = font?.subsets?.includes('latin')
+      ? 'latin'
+      : (font?.subsets?.[0] ?? 'latin');
+
+    if (isVar) {
+      return `export const ${varName} = ${fnName}({\n  subsets: ['${subset}'],\n  display: '${display}',\n});`;
+    }
+
+    const weights = resolveFontWeights(font, context.settings.defaultWeights);
+    const weightStrs = weights.map((w) => `'${w}'`).join(', ');
+    return `export const ${varName} = ${fnName}({\n  weight: [${weightStrs}],\n  subsets: ['${subset}'],\n  display: '${display}',\n});`;
+  });
+
+  return `${importLine}\n\n${instances.join('\n\n')}`;
+}
+
 export function buildSnippet(context: SnippetContext): string {
   switch (context.settings.copyFormat) {
     case 'google-link':
@@ -152,6 +275,12 @@ export function buildSnippet(context: SnippetContext): string {
       return buildGoogleImportSnippet(context);
     case 'fontsource':
       return buildFontsourceSnippet(context);
+    case 'tailwind-v4':
+      return buildTailwindV4Snippet(context);
+    case 'tailwind-v3':
+      return buildTailwindV3Snippet(context);
+    case 'next-font':
+      return buildNextFontSnippet(context);
     default:
       return buildGoogleLinkSnippet(context);
   }

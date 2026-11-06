@@ -1,13 +1,10 @@
+import { browser } from 'wxt/browser';
 import { familyNameToFontId } from '../../src/core/family-id';
-import {
-  buildFontsourceSnippet,
-  buildGoogleImportSnippet,
-  buildGoogleLinkSnippet,
-  type SnippetContext,
-} from '../../src/core/snippets';
+import { buildSnippet } from '../../src/core/snippets';
 import type {
   CatalogFont,
   Favorite,
+  Settings,
   StorageMode,
   Tag,
 } from '../../src/core/types';
@@ -18,6 +15,8 @@ import {
   settingsItem,
   tagsItem,
 } from '../../src/storage/items';
+import { copyText } from '../../src/ui/clipboard';
+import { STYLES } from './heart-styles';
 
 export interface HeartMountOptions {
   family: string;
@@ -27,225 +26,19 @@ export interface HeartMountOptions {
   onCopied?: (format: string) => void;
 }
 
+export interface MountedHeart {
+  host: HTMLElement;
+  unmount: () => void;
+}
+
 const HEART_PATH =
   'M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z';
-
-const STYLES = `
-:host {
-  display: inline-flex;
-  position: relative;
-  z-index: 10;
-  vertical-align: middle;
-  align-items: center;
-  justify-content: center;
-  line-height: 1;
-  user-select: none;
-  margin-right: 6px;
-  flex-shrink: 0;
-}
-
-.gff-heart-btn {
-  all: unset;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
-  cursor: pointer;
-  color: #5f6368;
-  transition: transform 0.15s ease, background-color 0.15s ease, color 0.15s ease;
-}
-
-.gff-heart-btn:hover {
-  background-color: rgba(60, 64, 67, 0.08);
-  transform: scale(1.08);
-}
-
-.gff-heart-btn:active {
-  transform: scale(0.92);
-}
-
-.gff-heart-btn:focus-visible {
-  outline: 2px solid #1a73e8;
-  outline-offset: 2px;
-}
-
-.gff-heart-btn.favorited {
-  color: #ea4335;
-}
-
-.gff-heart-icon {
-  width: 20px;
-  height: 20px;
-  transition: fill 0.15s ease, stroke 0.15s ease;
-}
-
-.gff-heart-btn:not(.favorited) .gff-heart-icon {
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 2;
-}
-
-.gff-heart-btn.favorited .gff-heart-icon {
-  fill: currentColor;
-  stroke: currentColor;
-  stroke-width: 1;
-}
-
-.gff-menu {
-  position: absolute;
-  top: calc(100% + 6px);
-  left: 0;
-  min-width: 210px;
-  background: #ffffff;
-  color: #202124;
-  border-radius: 8px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(0, 0, 0, 0.06);
-  padding: 10px;
-  z-index: 99999;
-  display: none;
-  flex-direction: column;
-  gap: 10px;
-  font-family: Roboto, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  font-size: 13px;
-  box-sizing: border-box;
-}
-
-.gff-menu.visible {
-  display: flex;
-}
-
-.gff-section {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.gff-section-title {
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  color: #70757a;
-  font-weight: 500;
-}
-
-.gff-tag-list {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-}
-
-.gff-tag-chip {
-  all: unset;
-  display: inline-flex;
-  align-items: center;
-  border: 1px solid #dadce0;
-  border-radius: 12px;
-  padding: 2px 8px;
-  cursor: pointer;
-  font-size: 12px;
-  background: transparent;
-  color: #3c4043;
-  transition: all 0.12s ease;
-}
-
-.gff-tag-dot {
-  display: inline-block;
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  margin-right: 5px;
-  flex-shrink: 0;
-}
-
-.gff-tag-chip:hover {
-  border-color: #1a73e8;
-  color: #1a73e8;
-}
-
-.gff-tag-chip.active {
-  background: #e8f0fe;
-  border-color: #1a73e8;
-  color: #1a73e8;
-  font-weight: 500;
-}
-
-.gff-empty-tags {
-  font-size: 12px;
-  color: #70757a;
-  line-height: 1.4;
-}
-
-.gff-open-lib-btn {
-  all: unset;
-  display: inline-block;
-  margin-top: 4px;
-  font-size: 11px;
-  color: #1a73e8;
-  cursor: pointer;
-  text-decoration: underline;
-}
-
-.gff-open-lib-btn:hover {
-  color: #1557b0;
-}
-
-.gff-actions {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  border-top: 1px solid #f1f3f4;
-  padding-top: 6px;
-}
-
-.gff-action-btn {
-  all: unset;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 6px 8px;
-  border-radius: 4px;
-  cursor: pointer;
-  font-size: 12px;
-  color: #3c4043;
-  transition: background 0.12s ease;
-}
-
-.gff-action-btn:hover {
-  background: #f1f3f4;
-  color: #202124;
-}
-
-.gff-toast {
-  position: absolute;
-  bottom: calc(100% + 6px);
-  left: 50%;
-  transform: translateX(-50%);
-  background: #202124;
-  color: #ffffff;
-  padding: 4px 10px;
-  border-radius: 4px;
-  font-size: 11px;
-  font-weight: 500;
-  white-space: nowrap;
-  pointer-events: none;
-  opacity: 0;
-  transition: opacity 0.2s ease, transform 0.2s ease;
-  z-index: 100000;
-}
-
-.gff-toast.visible {
-  opacity: 1;
-  transform: translateX(-50%) translateY(-2px);
-}
-`;
 
 export function mountHeartButton(
   container: HTMLElement,
   options: HeartMountOptions,
   referenceNode?: Node | null,
-): { unmount: () => void } {
+): MountedHeart {
   const host = document.createElement('span');
   host.className = 'gff-heart-host';
   host.setAttribute('data-gff-heart', options.family);
@@ -259,6 +52,7 @@ export function mountHeartButton(
   button.type = 'button';
   button.className = 'gff-heart-btn';
   button.setAttribute('aria-label', `Favorite ${options.family}`);
+  button.setAttribute('aria-haspopup', 'true');
 
   const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
   svg.setAttribute('class', 'gff-heart-icon');
@@ -276,6 +70,7 @@ export function mountHeartButton(
 
   const toast = document.createElement('div');
   toast.className = 'gff-toast';
+  toast.setAttribute('role', 'status');
   shadow.appendChild(toast);
 
   let isFavorited = options.isFavorited ?? false;
@@ -302,11 +97,14 @@ export function mountHeartButton(
 
   updateUI();
 
-  let unwatch = favoriteItem.watch((newVal) => {
-    currentFavorite = newVal;
-    isFavorited = Boolean(newVal);
-    updateUI();
-  });
+  const watchFavoriteItem = () =>
+    favoriteItem.watch((newVal) => {
+      currentFavorite = newVal;
+      isFavorited = Boolean(newVal);
+      updateUI();
+    });
+
+  let unwatch = watchFavoriteItem();
 
   const syncFavoriteState = async () => {
     const settings = await settingsItem.getValue();
@@ -315,11 +113,7 @@ export function mountHeartButton(
       activeMode = mode;
       unwatch();
       favoriteItem = defineFavoriteItem(fontId, activeMode);
-      unwatch = favoriteItem.watch((newVal) => {
-        currentFavorite = newVal;
-        isFavorited = Boolean(newVal);
-        updateUI();
-      });
+      unwatch = watchFavoriteItem();
     }
 
     const stored = await favoriteItem.getValue();
@@ -366,7 +160,9 @@ export function mountHeartButton(
       openLib.addEventListener('click', (event) => {
         event.stopPropagation();
         event.preventDefault();
-        window.open(browser.runtime.getURL('/library.html'), '_blank');
+        browser.runtime.sendMessage({ type: 'open-library' }).catch((error) => {
+          console.error('Failed to open library from content script:', error);
+        });
       });
 
       emptyNotice.appendChild(document.createElement('br'));
@@ -394,31 +190,45 @@ export function mountHeartButton(
 
         const isApplied = currentFavorite?.tags.includes(tag.id) ?? false;
         if (isApplied) chip.classList.add('active');
+        chip.setAttribute('aria-pressed', String(isApplied));
 
         chip.addEventListener('click', async (event) => {
           event.stopPropagation();
           event.preventDefault();
 
-          let fav = currentFavorite;
-          if (!fav) {
-            fav = {
-              id: fontId,
-              family: options.family,
-              addedAt: Date.now(),
-              tags: [tag.id],
-            };
-            isFavorited = true;
+          const previousFavorite = currentFavorite;
+          const previousIsFavorited = isFavorited;
+          const nextFavorite: Favorite = previousFavorite
+            ? {
+                ...previousFavorite,
+                tags: previousFavorite.tags.includes(tag.id)
+                  ? previousFavorite.tags.filter((t) => t !== tag.id)
+                  : [...previousFavorite.tags, tag.id],
+              }
+            : {
+                id: fontId,
+                family: options.family,
+                addedAt: Date.now(),
+                tags: [tag.id],
+              };
+
+          currentFavorite = nextFavorite;
+          isFavorited = true;
+          updateUI();
+          const nowApplied = nextFavorite.tags.includes(tag.id);
+          chip.classList.toggle('active', nowApplied);
+          chip.setAttribute('aria-pressed', String(nowApplied));
+
+          try {
+            await favoriteItem.setValue(nextFavorite);
+          } catch {
+            currentFavorite = previousFavorite;
+            isFavorited = previousIsFavorited;
             updateUI();
-          } else {
-            const hasTag = fav.tags.includes(tag.id);
-            const nextTags = hasTag
-              ? fav.tags.filter((t) => t !== tag.id)
-              : [...fav.tags, tag.id];
-            fav = { ...fav, tags: nextTags };
+            chip.classList.toggle('active', !nowApplied);
+            chip.setAttribute('aria-pressed', String(!nowApplied));
+            showToast("Couldn't save. Storage may be full.");
           }
-          currentFavorite = fav;
-          await favoriteItem.setValue(fav);
-          renderMenuContent();
         });
 
         tagList.appendChild(chip);
@@ -454,23 +264,18 @@ export function mountHeartButton(
           tags: [],
         };
 
-        const context: SnippetContext = {
+        const snippet = buildSnippet({
           favorites: [fav],
-          settings,
+          settings: {
+            ...settings,
+            copyFormat: format as Settings['copyFormat'],
+          },
           catalog,
-        };
+        });
 
-        let snippet = '';
-        if (format === 'google-link') {
-          snippet = buildGoogleLinkSnippet(context);
-        } else if (format === 'google-import') {
-          snippet = buildGoogleImportSnippet(context);
-        } else if (format === 'fontsource') {
-          snippet = buildFontsourceSnippet(context);
-        }
-
-        if (navigator.clipboard?.writeText) {
-          await navigator.clipboard.writeText(snippet);
+        if (!(await copyText(snippet))) {
+          showToast('Copy failed');
+          return;
         }
 
         showToast(`Copied ${label}!`);
@@ -483,13 +288,17 @@ export function mountHeartButton(
     actions.appendChild(createCopyButton('Google <link>', 'google-link'));
     actions.appendChild(createCopyButton('Google @import', 'google-import'));
     actions.appendChild(createCopyButton('Fontsource', 'fontsource'));
+    actions.appendChild(createCopyButton('Tailwind v4', 'tailwind-v4'));
+    actions.appendChild(createCopyButton('Next.js', 'next-font'));
 
     menu.appendChild(actions);
   };
 
+  const isMenuOpen = () => menu.classList.contains('visible');
+
   const openMenu = () => {
     if (closeTimer) clearTimeout(closeTimer);
-    renderMenuContent();
+    void renderMenuContent();
     menu.style.left = '';
     menu.style.right = '';
     menu.classList.add('visible');
@@ -503,13 +312,15 @@ export function mountHeartButton(
     }
   };
 
+  const hideMenu = () => {
+    menu.classList.remove('visible');
+    menu.style.left = '';
+    menu.style.right = '';
+  };
+
   const closeMenu = () => {
     if (openTimer) clearTimeout(openTimer);
-    closeTimer = setTimeout(() => {
-      menu.classList.remove('visible');
-      menu.style.left = '';
-      menu.style.right = '';
-    }, 200);
+    closeTimer = setTimeout(hideMenu, 200);
   };
 
   host.addEventListener('mouseenter', () => {
@@ -521,6 +332,22 @@ export function mountHeartButton(
 
   host.addEventListener('mouseleave', () => {
     closeMenu();
+  });
+
+  host.addEventListener('focusin', () => {
+    if (closeTimer) clearTimeout(closeTimer);
+    if (!isMenuOpen()) openMenu();
+  });
+
+  host.addEventListener('focusout', () => {
+    closeMenu();
+  });
+
+  host.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && isMenuOpen()) {
+      event.stopPropagation();
+      hideMenu();
+    }
   });
 
   host.addEventListener('contextmenu', (event) => {
@@ -564,6 +391,7 @@ export function mountHeartButton(
     event.stopPropagation();
     event.preventDefault();
 
+    const previousFavorite = currentFavorite;
     const nextState = !isFavorited;
     isFavorited = nextState;
     updateUI();
@@ -585,7 +413,9 @@ export function mountHeartButton(
       options.onToggle?.(nextState);
     } catch {
       isFavorited = !nextState;
+      currentFavorite = previousFavorite;
       updateUI();
+      showToast("Couldn't save. Storage may be full.");
     }
   });
 
@@ -596,6 +426,7 @@ export function mountHeartButton(
   }
 
   return {
+    host,
     unmount() {
       if (openTimer) clearTimeout(openTimer);
       if (closeTimer) clearTimeout(closeTimer);

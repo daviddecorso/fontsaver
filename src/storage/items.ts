@@ -4,6 +4,7 @@ import { fetchCatalog } from '../core/catalog';
 import {
   calculateStorageUsage,
   createExportPayload,
+  exceedsSyncQuota,
   mergeFavorites,
   mergeTags,
   validateExportData,
@@ -215,6 +216,25 @@ export async function saveFavorite(
   return { favorite: fav, quota };
 }
 
+export async function updateFavoriteNote(
+  fontId: string,
+  note: string,
+  mode?: StorageMode,
+): Promise<Favorite | null> {
+  const targetMode = mode ?? (await getActiveStorageMode());
+  const item = defineFavoriteItem(fontId, targetMode);
+  const fav = await item.getValue();
+  if (!fav) return null;
+
+  const trimmed = note.trim();
+  const updated: Favorite = {
+    ...fav,
+    note: trimmed.length > 0 ? trimmed : undefined,
+  };
+  await item.setValue(updated);
+  return updated;
+}
+
 export async function removeFavorite(
   fontId: string,
   mode?: StorageMode,
@@ -288,6 +308,26 @@ export function watchStorageQuota(
   };
 }
 
+function favoriteSyncKey(fav: Favorite): string {
+  return `fav:${fav.id}`;
+}
+
+async function assertFitsSyncQuota(change: {
+  removedKeys: string[];
+  entries: Record<string, unknown>;
+}): Promise<void> {
+  const snapshot = {
+    ...((await storage.snapshot('sync')) as Record<string, unknown>),
+  };
+  for (const key of change.removedKeys) delete snapshot[key];
+  Object.assign(snapshot, change.entries);
+  if (exceedsSyncQuota(snapshot)) {
+    throw new Error(
+      'This would exceed the sync storage limit. Switch to local storage or use fewer fonts.',
+    );
+  }
+}
+
 export async function exportLibraryData(): Promise<ExportData> {
   const settings = (await settingsItem.getValue()) ?? defaultSettings;
   const favorites = await getAllFavorites();
@@ -312,35 +352,52 @@ export async function importLibraryData(
   const targetMode = settings.storageMode ?? 'sync';
   const targetTagsItem = targetMode === 'local' ? localTagsItem : tagsItem;
 
+  const existing = await getAllFavorites(targetMode);
   let finalFavorites: Favorite[];
   let finalTags: Tag[];
 
   if (mode === 'replace') {
-    const existing = await getAllFavorites(targetMode);
-    for (const fav of existing) {
-      await defineFavoriteItem(fav.id, targetMode).removeValue();
-    }
     finalFavorites = validPayload.favorites;
     finalTags = validPayload.tags;
   } else {
-    const existing = await getAllFavorites(targetMode);
     const existingTags = (await targetTagsItem.getValue()) ?? [];
     finalFavorites = mergeFavorites(existing, validPayload.favorites);
     finalTags = mergeTags(existingTags, validPayload.tags);
   }
 
-  await targetTagsItem.setValue(finalTags);
+  const nextSettings: Settings | undefined = validPayload.settings
+    ? { ...settings, ...validPayload.settings, storageMode: targetMode }
+    : undefined;
+
+  if (targetMode === 'sync') {
+    await assertFitsSyncQuota({
+      removedKeys: mode === 'replace' ? existing.map(favoriteSyncKey) : [],
+      entries: {
+        ...Object.fromEntries(
+          finalFavorites.map((f) => [favoriteSyncKey(f), f]),
+        ),
+        tags: finalTags,
+        ...(nextSettings ? { settings: nextSettings } : {}),
+      },
+    });
+  }
 
   for (const fav of finalFavorites) {
     await defineFavoriteItem(fav.id, targetMode).setValue(fav);
   }
+  await targetTagsItem.setValue(finalTags);
 
-  if (validPayload.settings) {
-    await settingsItem.setValue({
-      ...settings,
-      ...validPayload.settings,
-      storageMode: targetMode,
-    });
+  if (mode === 'replace') {
+    const keptIds = new Set(finalFavorites.map((f) => f.id));
+    for (const fav of existing) {
+      if (!keptIds.has(fav.id)) {
+        await defineFavoriteItem(fav.id, targetMode).removeValue();
+      }
+    }
+  }
+
+  if (nextSettings) {
+    await settingsItem.setValue(nextSettings);
   }
 
   return {
@@ -360,11 +417,33 @@ export async function migrateStorageMode(
   const sourceTags = (await sourceTagsItem.getValue()) ?? [];
   const targetTags = (await targetTagsItem.getValue()) ?? [];
   const mergedTags = mergeTags(targetTags, sourceTags);
-  await targetTagsItem.setValue(mergedTags);
 
-  for (const fav of sourceFavs) {
-    const item = defineFavoriteItem(fav.id, targetMode);
-    await item.setValue(fav);
+  if (targetMode === 'sync') {
+    await assertFitsSyncQuota({
+      removedKeys: [],
+      entries: {
+        ...Object.fromEntries(sourceFavs.map((f) => [favoriteSyncKey(f), f])),
+        tags: mergedTags,
+      },
+    });
+  }
+
+  const preexistingTargetIds = new Set(
+    (await getAllFavorites(targetMode)).map((f) => f.id),
+  );
+  const copiedIds: string[] = [];
+
+  try {
+    for (const fav of sourceFavs) {
+      await defineFavoriteItem(fav.id, targetMode).setValue(fav);
+      if (!preexistingTargetIds.has(fav.id)) copiedIds.push(fav.id);
+    }
+    await targetTagsItem.setValue(mergedTags);
+  } catch (error) {
+    for (const id of copiedIds) {
+      await defineFavoriteItem(id, targetMode).removeValue();
+    }
+    throw error;
   }
 
   const currentSettings = (await settingsItem.getValue()) ?? defaultSettings;
@@ -372,6 +451,11 @@ export async function migrateStorageMode(
     ...currentSettings,
     storageMode: targetMode,
   });
+
+  for (const fav of sourceFavs) {
+    await defineFavoriteItem(fav.id, sourceMode).removeValue();
+  }
+  await sourceTagsItem.setValue([]);
 
   return { migratedCount: sourceFavs.length };
 }

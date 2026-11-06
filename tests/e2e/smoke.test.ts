@@ -69,6 +69,72 @@ test.describe('extension smoke tests', () => {
     await expect(page.getByRole('button', { name: 'All' })).toBeVisible();
   });
 
+  test('pairing tool loads fonts and updates preview styles on selection', async ({
+    context,
+    extensionId,
+  }) => {
+    const page = await context.newPage();
+    await page.goto(`chrome-extension://${extensionId}/library.html`);
+
+    await page.evaluate(async () => {
+      const extChrome = (
+        window as unknown as {
+          chrome: {
+            storage: { sync: { set: (data: unknown) => Promise<void> } };
+          };
+        }
+      ).chrome;
+      await extChrome.storage.sync.set({
+        'fav:roboto': {
+          id: 'roboto',
+          family: 'Roboto',
+          addedAt: Date.now(),
+          tags: [],
+        },
+        'fav:merriweather': {
+          id: 'merriweather',
+          family: 'Merriweather',
+          addedAt: Date.now() + 1,
+          tags: [],
+        },
+      });
+    });
+
+    await page.reload();
+    await page.waitForTimeout(1500);
+
+    // Switch to pairing view
+    await page.getByRole('button', { name: 'Font Pairing' }).click();
+
+    // Check heading and body select exist
+    const headingSelect = page.locator('#heading-font-select');
+    const bodySelect = page.locator('#body-font-select');
+    await expect(headingSelect).toBeVisible();
+    await expect(bodySelect).toBeVisible();
+
+    const headingInput = page.getByLabel('Specimen heading text');
+    const bodyTextarea = page.getByLabel('Specimen body text');
+
+    await expect(headingInput).toHaveCSS('font-family', /Merriweather/);
+    await expect(bodyTextarea).toHaveCSS('font-family', /Roboto/);
+
+    // Swap roles and verify fonts swap in specimen
+    await page.getByRole('button', { name: 'Swap Roles' }).click();
+    await expect(headingInput).toHaveCSS('font-family', /Roboto/);
+    await expect(bodyTextarea).toHaveCSS('font-family', /Merriweather/);
+
+    // Verify batch links in head include valid Google Fonts URL
+    const links = await page.evaluate(() => {
+      const batchLinks = Array.from(
+        document.querySelectorAll('link[data-gff-preview-batch]'),
+      ).map((l) => (l as HTMLLinkElement).href);
+      return batchLinks;
+    });
+    expect(links.length).toBeGreaterThan(0);
+    expect(links[0]).toContain('wght@');
+    expect(links[0]).not.toContain('wght=');
+  });
+
   test('live grid: injects hearts on fonts.google.com and syncs to popup', async ({
     context,
     extensionId,

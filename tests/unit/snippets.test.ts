@@ -1,9 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import {
+  buildFamilyParam,
   buildFontsourceSnippet,
   buildGoogleImportSnippet,
   buildGoogleLinkSnippet,
+  buildNextFontSnippet,
   buildSnippet,
+  buildTailwindV3Snippet,
+  buildTailwindV4Snippet,
   getCategoryFallback,
   resolveFontWeights,
 } from '../../src/core/snippets';
@@ -311,6 +315,85 @@ describe('snippets', () => {
     });
   });
 
+  describe('buildTailwindV4Snippet', () => {
+    it('returns empty string when no favorites selected', () => {
+      expect(
+        buildTailwindV4Snippet({
+          favorites: [],
+          settings: sampleSettings,
+        }),
+      ).toBe('');
+    });
+
+    it('generates @theme declaration for variable and static fonts', () => {
+      const snippet = buildTailwindV4Snippet({
+        favorites: [sampleFavorite, serifFavorite],
+        settings: sampleSettings,
+        catalog: mockCatalog,
+      });
+      expect(snippet).toContain('@theme {');
+      expect(snippet).toContain(
+        "  --font-inter: 'Inter Variable', sans-serif;",
+      );
+      expect(snippet).toContain(
+        "  --font-merriweather: 'Merriweather', serif;",
+      );
+      expect(snippet).toContain('}');
+    });
+  });
+
+  describe('buildTailwindV3Snippet', () => {
+    it('returns empty string when no favorites selected', () => {
+      expect(
+        buildTailwindV3Snippet({
+          favorites: [],
+          settings: sampleSettings,
+        }),
+      ).toBe('');
+    });
+
+    it('generates tailwind.config.js fontFamily extend block', () => {
+      const snippet = buildTailwindV3Snippet({
+        favorites: [sampleFavorite, monospaceFavorite],
+        settings: sampleSettings,
+        catalog: mockCatalog,
+      });
+      expect(snippet).toContain('fontFamily: {');
+      expect(snippet).toContain(
+        "'inter': ['\"Inter Variable\"', 'sans-serif'],",
+      );
+      expect(snippet).toContain(
+        "'fira-code': ['\"Fira Code Variable\"', 'monospace'],",
+      );
+    });
+  });
+
+  describe('buildNextFontSnippet', () => {
+    it('returns empty string when no favorites selected', () => {
+      expect(
+        buildNextFontSnippet({
+          favorites: [],
+          settings: sampleSettings,
+        }),
+      ).toBe('');
+    });
+
+    it('generates next/font/google imports and instances', () => {
+      const snippet = buildNextFontSnippet({
+        favorites: [sampleFavorite, staticFavorite],
+        settings: sampleSettings,
+        catalog: mockCatalog,
+      });
+      expect(snippet).toContain(
+        "import { Inter, Roboto } from 'next/font/google';",
+      );
+      expect(snippet).toContain('export const inter = Inter({');
+      expect(snippet).toContain("subsets: ['latin'],");
+      expect(snippet).toContain('export const roboto = Roboto({');
+      expect(snippet).toContain("weight: ['400', '700'],");
+    });
+  });
+
   describe('buildSnippet', () => {
     it('dispatches to chosen format', () => {
       const link = buildSnippet({
@@ -333,6 +416,49 @@ describe('snippets', () => {
         catalog: mockCatalog,
       });
       expect(fontsource).toContain('pnpm add');
+
+      const tw4 = buildSnippet({
+        favorites: [sampleFavorite],
+        settings: { ...sampleSettings, copyFormat: 'tailwind-v4' },
+        catalog: mockCatalog,
+      });
+      expect(tw4).toContain('@theme');
+
+      const tw3 = buildSnippet({
+        favorites: [sampleFavorite],
+        settings: { ...sampleSettings, copyFormat: 'tailwind-v3' },
+        catalog: mockCatalog,
+      });
+      expect(tw3).toContain('fontFamily: {');
+
+      const nextFont = buildSnippet({
+        favorites: [sampleFavorite],
+        settings: { ...sampleSettings, copyFormat: 'next-font' },
+        catalog: mockCatalog,
+      });
+      expect(nextFont).toContain('next/font/google');
+    });
+  });
+
+  describe('buildFamilyParam', () => {
+    it('formats variable fonts using their supported weight range', () => {
+      const caveat = mockCatalog.find((c) => c.id === 'caveat');
+      expect(buildFamilyParam('Caveat', caveat)).toBe(
+        'family=Caveat:wght@400..700',
+      );
+    });
+
+    it('formats static fonts using joined weights with @ separator', () => {
+      const roboto = mockCatalog.find((c) => c.id === 'roboto');
+      expect(buildFamilyParam('Roboto', roboto)).toBe(
+        'family=Roboto:wght@100;300;400;500;700;900',
+      );
+    });
+
+    it('falls back to 400;700 with @ separator when font is not in catalog', () => {
+      expect(buildFamilyParam('Unknown Font')).toBe(
+        'family=Unknown+Font:wght@400;700',
+      );
     });
   });
 });

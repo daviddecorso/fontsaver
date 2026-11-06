@@ -1,12 +1,8 @@
 import { useEffect, useState } from 'react';
 import { browser } from 'wxt/browser';
+import { specimenUrl } from '../../src/core/family-id';
 import { filterFavorites } from '../../src/core/search';
-import {
-  buildFontsourceSnippet,
-  buildGoogleImportSnippet,
-  buildGoogleLinkSnippet,
-  type SnippetContext,
-} from '../../src/core/snippets';
+import { buildSnippet, type SnippetContext } from '../../src/core/snippets';
 import type {
   CatalogFont,
   Favorite,
@@ -23,6 +19,7 @@ import {
   watchFavorites,
   watchTags,
 } from '../../src/storage/items';
+import { copyText } from '../../src/ui/clipboard';
 
 export default function App() {
   const [favorites, setFavorites] = useState<Favorite[]>([]);
@@ -77,18 +74,9 @@ export default function App() {
       catalog,
     };
 
-    let snippet = '';
-    if (settings.copyFormat === 'google-import') {
-      snippet = buildGoogleImportSnippet(context);
-    } else if (settings.copyFormat === 'fontsource') {
-      snippet = buildFontsourceSnippet(context);
-    } else {
-      snippet = buildGoogleLinkSnippet(context);
-    }
+    const snippet = buildSnippet(context);
 
-    if (navigator.clipboard?.writeText) {
-      await navigator.clipboard.writeText(snippet);
-    }
+    if (!(await copyText(snippet))) return;
 
     setCopiedId(fav.id);
     setTimeout(() => {
@@ -112,10 +100,7 @@ export default function App() {
   };
 
   const handleOpenFont = (family: string) => {
-    const url = `https://fonts.google.com/specimen/${encodeURIComponent(
-      family.replace(/\s+/g, '+'),
-    )}`;
-    void browser.tabs.create({ url });
+    void browser.tabs.create({ url: specimenUrl(family) });
   };
 
   const handleOpenGoogleFonts = () => {

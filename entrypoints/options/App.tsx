@@ -118,7 +118,8 @@ export default function App() {
   }, [loadData]);
 
   const updateSettings = async (updates: Partial<Settings>) => {
-    const updated = { ...settings, ...updates };
+    const stored = (await settingsItem.getValue()) ?? settings;
+    const updated = { ...stored, ...updates };
     setSettings(updated);
     await settingsItem.setValue(updated);
     showToast('Settings saved');
@@ -377,6 +378,21 @@ export default function App() {
                     id: 'fontsource',
                     label: 'Fontsource',
                     desc: 'Package install + JS/CSS import',
+                  },
+                  {
+                    id: 'tailwind-v4',
+                    label: 'Tailwind v4',
+                    desc: 'CSS @theme variables block',
+                  },
+                  {
+                    id: 'tailwind-v3',
+                    label: 'Tailwind v3',
+                    desc: 'tailwind.config.js extend.fontFamily',
+                  },
+                  {
+                    id: 'next-font',
+                    label: 'Next.js',
+                    desc: 'next/font/google loaders & exports',
                   },
                 ].map((item) => (
                   <label

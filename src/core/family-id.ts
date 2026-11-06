@@ -21,6 +21,15 @@ export function extractFamilyFromHref(href: string): string | null {
   }
 }
 
+export function specimenUrl(family: string): string {
+  const slug = family
+    .trim()
+    .split(/\s+/)
+    .map((part) => encodeURIComponent(part))
+    .join('+');
+  return `https://fonts.google.com/specimen/${slug}`;
+}
+
 export function familyNameToFontId(
   familyName: string,
   catalog?: CatalogFont[],

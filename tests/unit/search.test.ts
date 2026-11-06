@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { filterFavorites } from '../../src/core/search';
+import { filterFavorites, sortFavorites } from '../../src/core/search';
 import type { CatalogFont, Favorite, Tag } from '../../src/core/types';
 
 describe('search core', () => {
@@ -132,5 +132,73 @@ describe('search core', () => {
         (f) => f.id,
       ),
     ).toEqual(['inter', 'playfair', 'fira-code']);
+  });
+
+  it('matches query in favorite note', () => {
+    const favsWithNote: Favorite[] = [
+      ...favorites,
+      {
+        id: 'inter',
+        family: 'Inter',
+        addedAt: 1000,
+        tags: [],
+        note: 'Primary brand typeface for dashboard',
+      },
+    ];
+
+    const results = filterFavorites(favsWithNote, mockCatalog, tags, {
+      query: 'dashboard',
+    });
+    expect(results.map((f) => f.id)).toEqual(['inter']);
+  });
+
+  describe('sortFavorites', () => {
+    it('sorts by newest first (descending addedAt)', () => {
+      const sorted = sortFavorites(favorites, mockCatalog, 'newest');
+      expect(sorted.map((f) => f.id)).toEqual([
+        'inter',
+        'roboto',
+        'playfair',
+        'fira-code',
+      ]);
+    });
+
+    it('sorts by oldest first (ascending addedAt)', () => {
+      const sorted = sortFavorites(favorites, mockCatalog, 'oldest');
+      expect(sorted.map((f) => f.id)).toEqual([
+        'fira-code',
+        'playfair',
+        'roboto',
+        'inter',
+      ]);
+    });
+
+    it('sorts alphabetically A-Z and Z-A', () => {
+      const asc = sortFavorites(favorites, mockCatalog, 'alpha-asc');
+      expect(asc.map((f) => f.family)).toEqual([
+        'Fira Code',
+        'Inter',
+        'Playfair Display',
+        'Roboto',
+      ]);
+
+      const desc = sortFavorites(favorites, mockCatalog, 'alpha-desc');
+      expect(desc.map((f) => f.family)).toEqual([
+        'Roboto',
+        'Playfair Display',
+        'Inter',
+        'Fira Code',
+      ]);
+    });
+
+    it('sorts by catalog category', () => {
+      const sorted = sortFavorites(favorites, mockCatalog, 'category');
+      expect(sorted.map((f) => f.id)).toEqual([
+        'fira-code',
+        'inter',
+        'roboto',
+        'playfair',
+      ]);
+    });
   });
 });

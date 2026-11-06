@@ -1,7 +1,12 @@
 import { browser } from 'wxt/browser';
-import { familyNameToFontId } from '../src/core/family-id';
+import {
+  extractFamilyFromHref,
+  familyNameToFontId,
+} from '../src/core/family-id';
 import {
   catalogItem,
+  defineFavoriteItem,
+  getActiveStorageMode,
   refreshCatalogCache,
   saveFavorite,
 } from '../src/storage/items';
@@ -10,8 +15,12 @@ export const CATALOG_ALARM_NAME = 'catalog-refresh';
 export const CATALOG_REFRESH_INTERVAL_MINUTES = 7 * 24 * 60;
 
 export const MENU_OPEN_LIBRARY = 'open-library';
+export const MENU_OPEN_SIDEPANEL = 'open-sidepanel';
 export const MENU_OPEN_OPTIONS = 'open-options';
 export const MENU_FAVORITE_SPECIMEN = 'favorite-specimen';
+
+export const MESSAGE_OPEN_LIBRARY = 'open-library';
+export const MESSAGE_OPEN_OPTIONS = 'open-options';
 
 export async function setupContextMenus(): Promise<void> {
   if (browser.contextMenus?.removeAll) {
@@ -26,6 +35,12 @@ export async function setupContextMenus(): Promise<void> {
     browser.contextMenus.create({
       id: MENU_OPEN_LIBRARY,
       title: 'Open Font Library',
+      contexts: ['action', 'page'],
+    });
+
+    browser.contextMenus.create({
+      id: MENU_OPEN_SIDEPANEL,
+      title: 'Open in Side Panel',
       contexts: ['action', 'page'],
     });
 
@@ -54,6 +69,32 @@ export async function handleContextMenuClick(
     return true;
   }
 
+  if (info.menuItemId === MENU_OPEN_SIDEPANEL) {
+    const chromeWithSidePanel = (
+      globalThis as unknown as {
+        chrome?: {
+          sidePanel?: {
+            open?: (opts: { windowId?: number }) => Promise<void>;
+          };
+        };
+      }
+    ).chrome;
+    const tabObj = _tab as { windowId?: number } | undefined;
+    if (chromeWithSidePanel?.sidePanel?.open && tabObj?.windowId) {
+      try {
+        await chromeWithSidePanel.sidePanel.open({
+          windowId: tabObj.windowId,
+        });
+        return true;
+      } catch {
+        // Fallback to tabs.create
+      }
+    }
+    const url = browser.runtime.getURL('/sidepanel.html');
+    await browser.tabs.create({ url });
+    return true;
+  }
+
   if (info.menuItemId === MENU_OPEN_OPTIONS) {
     try {
       if (browser.runtime?.openOptionsPage) {
@@ -69,19 +110,57 @@ export async function handleContextMenuClick(
   }
 
   if (info.menuItemId === MENU_FAVORITE_SPECIMEN && info.linkUrl) {
-    const match = info.linkUrl.match(/\/specimen\/([^/?#]+)/);
-    if (!match?.[1]) return false;
+    const rawFamily = extractFamilyFromHref(info.linkUrl);
+    if (!rawFamily) return false;
 
-    const family = decodeURIComponent(match[1].replace(/\+/g, ' '));
     const catalog = await catalogItem.getValue();
-    const fontId = familyNameToFontId(family, catalog?.fonts);
+    const fontId = familyNameToFontId(rawFamily, catalog?.fonts);
+    const family =
+      catalog?.fonts.find((font) => font.id === fontId)?.family ?? rawFamily;
 
-    await saveFavorite({
-      id: fontId,
-      family,
-      addedAt: Date.now(),
-      tags: [],
-    });
+    try {
+      const mode = await getActiveStorageMode();
+      const existing = await defineFavoriteItem(fontId, mode).getValue();
+      if (existing) return true;
+
+      await saveFavorite(
+        { id: fontId, family, addedAt: Date.now(), tags: [] },
+        mode,
+      );
+      return true;
+    } catch (error) {
+      console.error('Failed to favorite font from context menu:', error);
+      return false;
+    }
+  }
+
+  return false;
+}
+
+export async function handleMessage(message: unknown): Promise<boolean> {
+  if (typeof message !== 'object' || message === null || !('type' in message)) {
+    return false;
+  }
+
+  const { type } = message as { type: unknown };
+
+  if (type === MESSAGE_OPEN_LIBRARY) {
+    const url = browser.runtime.getURL('/library.html');
+    await browser.tabs.create({ url });
+    return true;
+  }
+
+  if (type === MESSAGE_OPEN_OPTIONS) {
+    try {
+      if (browser.runtime?.openOptionsPage) {
+        await browser.runtime.openOptionsPage();
+        return true;
+      }
+    } catch {
+      // Fallback
+    }
+    const url = browser.runtime.getURL('/options.html');
+    await browser.tabs.create({ url });
     return true;
   }
 
@@ -125,6 +204,19 @@ export async function handleInstall(
   }
 }
 
+export async function ensureCatalogPopulated(
+  fetchFn: typeof fetch = fetch,
+): Promise<boolean> {
+  try {
+    if (await catalogItem.getValue()) return false;
+    await refreshCatalogCache(fetchFn);
+    return true;
+  } catch (error) {
+    console.error('Failed to populate missing catalog:', error);
+    return false;
+  }
+}
+
 export async function ensureCatalogAlarm(): Promise<void> {
   const existingAlarm = await browser.alarms.get(CATALOG_ALARM_NAME);
   if (!existingAlarm) {
@@ -147,5 +239,24 @@ export default defineBackground(() => {
     void handleContextMenuClick(info, tab);
   });
 
+  browser.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+    if (
+      typeof message === 'object' &&
+      message !== null &&
+      'type' in message &&
+      ((message as { type: unknown }).type === MESSAGE_OPEN_LIBRARY ||
+        (message as { type: unknown }).type === MESSAGE_OPEN_OPTIONS)
+    ) {
+      handleMessage(message)
+        .catch((error) => {
+          console.error('Failed to handle message:', error);
+          return false;
+        })
+        .then(sendResponse);
+      return true;
+    }
+  });
+
   void ensureCatalogAlarm();
+  void ensureCatalogPopulated();
 });
